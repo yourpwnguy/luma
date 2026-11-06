@@ -35,6 +35,7 @@ the wire" and "upstream says this should work".
 | ASUS single-zone color and brightness | Verified live and visually. The ACPI write changed the keyboard color. |
 | ASUS exit restore | Restores a configured default color and the captured brightness. The mode is write-only, so the previous mode cannot be read. |
 | Synchronization | 30 fps engine, absolute deadlines, per-device latency compensation. K617 and G102 measured near 30 fps; ASUS runs at 15 fps. |
+| Cross-device flow effects | Host-side only, no new protocol. Live-tested with orbit and flow at 30 fps and no late or dropped K617/G102 frames. |
 
 The one thing still pending on this exact unit is the physical confirmation of
 the Menu and RCtrl slot positions. Everything else in the table was exercised
@@ -142,7 +143,8 @@ src/
   config.rs                  TOML schema and validation
   engine.rs                  one effect clock, per-device rendering
   effect/                    one file per effect and the registry
-  geometry.rs                normalized LED positions
+  geometry.rs                normalized LED positions and samples
+  stage.rs                   shared 0..1 device loop mapping
   color.rs                   RGB, HSV, hex parsing
   sync.rs                    worker threads, mailboxes, deadline scheduler
   device/
@@ -358,11 +360,63 @@ clean divisor of a 30 fps engine.
 | `rainbow` | Spatial rainbow, hue varies along x and drifts over time. |
 | `wave` | Moving brightness bands of the base color. |
 | `cycle` | One global hue cycle. Best for checking the single-zone laptop against the others. |
+| `flow` | Rainbow gradient wrapped around the shared device loop, drifting over time. |
+| `orbit` | One comet with a fading tail sweeping keyboard -> mouse -> laptop. |
+| `chase` | Three comets evenly spaced around the device loop. |
+| `pulse` | Wide, smooth brightness wave traveling around the loop. |
+| `pingpong` | A comet travels forward, reverses, and comes back. |
 
-The engine samples every LED's normalized position from 0 to 1. The K617 has
-61 positions in a 6-row layout, the G102 has left/center/right at 0/0.5/1, and
-the ASUS has one LED at the center. A single-zone device therefore follows the
-center of the same wave instead of pretending to have per-key resolution.
+The per-device effects sample every LED's normalized position from 0 to 1. The
+K617 has 61 positions in a 6-row layout, the G102 has left/center/right at
+0/0.5/1, and the ASUS has one LED at the center. A single-zone device therefore
+follows the center of the same wave instead of pretending to have per-key
+resolution.
+
+### The shared device loop
+
+The flow effects need one order that all three devices can share. luma gives
+each device a slice of a 0..1 loop:
+
+```text
+keyboard 0.00..0.45  ->  mouse 0.45..0.70  ->  laptop 0.70..0.85  ->  gap 0.85..1.00
+```
+
+The keyboard maps its left-to-right key position into its slice, the mouse maps
+its three zones into its slice, and the one-zone laptop sits at the center of
+its slice. A comet therefore sweeps across the K617 keys, visits the three
+mouse zones in order, pulses the laptop, then restarts from the keyboard. The
+0.85..1.00 gap is intentionally dark so the restart is easy to see.
+
+The sample config sets the spans explicitly:
+
+```toml
+[[stage.devices]]
+id = "keyboard"
+start = 0.00
+end = 0.45
+
+[[stage.devices]]
+id = "mouse"
+start = 0.45
+end = 0.70
+
+[[stage.devices]]
+id = "laptop"
+start = 0.70
+end = 0.85
+```
+
+Change the spans to reverse the order or to make a device linger longer. If an
+entry is omitted, luma falls back to the built-in span for the device type. A
+device type with no built-in span must have an explicit `[[stage.devices]]`
+entry.
+
+```bash
+./target/release/luma run --effect orbit --speed 1 --duration 8
+./target/release/luma run --effect chase --speed 1 --duration 8
+./target/release/luma run --effect flow --duration 8
+./target/release/luma run --effect pingpong --duration 8
+```
 
 ## Adding an effect
 
@@ -372,17 +426,22 @@ center of the same wave instead of pretending to have per-key resolution.
    ```rust
    impl Effect for MyEffect {
        fn name(&self) -> &'static str { "my_effect" }
-       fn color_at(&self, ctx: &EffectContext, position: Point) -> Rgb {
-           // Return full-intensity color. The engine applies brightness.
+       fn color_at(&self, ctx: &EffectContext, led: &LedSample) -> Rgb {
+           // led.local is the position inside one device.
+           // led.loop_s is the position on the shared 0..1 device loop.
+           // Return a full-intensity color; the engine applies brightness.
        }
    }
    ```
 
 3. Register it in `src/effect/mod.rs` in `build()` and add a row to `NAMES`.
-4. Add a deterministic unit test. Time and position are the only inputs.
-5. Run `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, and
+4. Add a deterministic unit test. Time, `led.local`, and `led.loop_s` are the
+   only inputs.
+5. Use `led.local` for an effect that should look the same on every device.
+   Use `led.loop_s` for an effect that should travel across the devices.
+6. Run `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, and
    `cargo test`.
-6. Try it with `luma run --dry-run --effect my_effect --duration 2`, then on
+7. Try it with `luma run --dry-run --effect my_effect --duration 2`, then on
    hardware.
 
 Effects are stateless by design so all devices share one phase. If you need
@@ -395,7 +454,10 @@ step rather than keeping per-device state.
 2. Implement `Device`: `id`, `kind`, `model`, `layout`, `open`, `send`,
    `restore`, `close`, `is_open`.
 3. Build `layout()` with one `LedSpec` per addressable LED and normalized
-   positions. Return colors from `send` in that same order.
+   positions. Return colors from `send` in that same order. Add a
+   `[[stage.devices]]` span in the config, or a built-in default for the new
+   kind in `stage.rs`, so the flow effects know where the device sits on the
+   shared loop.
 4. Capture a restore snapshot in `open()` if the protocol supports reading it.
    Do not overwrite the snapshot on reconnect.
 5. Add a match arm in `src/device/registry.rs::build()` and a discovery entry in
@@ -480,6 +542,18 @@ Expected: each of the 61 keys lights in row-major order for 300 ms against a
 dim blue background. This is the quickest way to find a regional layout
 difference.
 
+**Cross-device flow**
+
+```bash
+./target/release/luma run --effect orbit --speed 1 --duration 8
+./target/release/luma run --effect flow --duration 8
+```
+
+Expected: orbit sends one bright comet across the keyboard from left to right,
+then through the three mouse zones, then pulses the laptop, then restarts after
+a short dark gap. Flow shows a rainbow gradient where the keyboard, mouse, and
+laptop each hold the part of the gradient that matches their loop slice.
+
 **Everything at once**
 
 ```bash
@@ -492,7 +566,7 @@ The script mirrors its output to `luma-live-test.log`.
 
 * **K617 Menu and RCtrl slot positions are unverified.** The rest of the key
   map is hardware-verified upstream. Run `self-test --keys Menu,RCtrl` and, if
-  needed, adjust the two entries in `src/device/k617.rs`.
+  needed, adjust the two entries in `src/device/k617_layout.rs`.
 * **K617 variants differ.** This map targets the US 61-key K617 Fizz. An ABNT2
   or other regional matrix may need a different slot table. The anchors and
   config protocol are shared, but the physical positions are not guaranteed.
@@ -513,6 +587,10 @@ The script mirrors its output to `luma-live-test.log`.
 * **ASUS TUF A15 has one keyboard zone.** The `asus-wmi` ABI exposes one color
   for the whole keyboard. Effects are rendered at 15 fps to keep ACPI traffic
   reasonable.
+* **The device loop is one-dimensional.** The spans describe the order and
+  timing of the flow, not the physical distance between the devices. Tune the
+  `[[stage.devices]]` entries if the physical layout changes. The laptop can
+  only pulse as the flow arrives because it has one zone.
 * **The ASUS mode is write-only.** We restore the captured brightness and a
   configured color, not the exact previous effect. The sample uses white.
 * **Windows is not implemented in v1.** A Windows ASUS backend would need the

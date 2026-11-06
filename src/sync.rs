@@ -23,6 +23,7 @@ use log::{debug, error, info, warn};
 use crate::color::Rgb;
 use crate::device::Device;
 use crate::geometry::LedSpec;
+use crate::stage::{Stage, StageSample};
 
 /// A frame that should become visible at `target`.
 #[derive(Clone, Debug)]
@@ -121,6 +122,7 @@ pub struct Worker {
     pub id: String,
     pub kind: &'static str,
     pub layout: Vec<LedSpec>,
+    pub stage: Vec<StageSample>,
     latest: Arc<LatestFrame>,
     stats: Arc<Mutex<DeviceStats>>,
     handle: Option<JoinHandle<WorkerExit>>,
@@ -161,6 +163,7 @@ impl Session {
     /// `devices` must already be opened. Order is preserved for restore.
     pub fn start(
         devices: Vec<(Box<dyn Device>, u32)>,
+        stage: &Stage,
         stop: Arc<AtomicBool>,
         no_restore: bool,
     ) -> Result<Self> {
@@ -175,6 +178,7 @@ impl Session {
             let id = device.id().to_string();
             let kind = device.kind();
             let layout = device.layout().to_vec();
+            let stage_samples = stage.samples_for(&id, kind, &layout)?;
             let latest = Arc::new(LatestFrame::new());
             let stats = Arc::new(Mutex::new(DeviceStats::default()));
 
@@ -244,6 +248,7 @@ impl Session {
                 id,
                 kind,
                 layout,
+                stage: stage_samples,
                 latest,
                 stats,
                 handle: Some(handle),

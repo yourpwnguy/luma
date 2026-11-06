@@ -11,7 +11,8 @@ use anyhow::Result;
 use crate::color::Rgb;
 use crate::config::EffectSettings;
 use crate::effect::{Effect, EffectContext, build};
-use crate::geometry::LedSpec;
+use crate::geometry::{LedSample, LedSpec};
+use crate::stage::StageSample;
 
 pub struct Engine {
     effect: Box<dyn Effect>,
@@ -41,14 +42,15 @@ impl Engine {
     /// Brightness is applied here, after the effect's own envelope, so a
     /// breathing effect at 50% still breathes between 0% and 50% instead of
     /// being clipped.
-    pub fn render(&self, time: f64, layout: &[LedSpec]) -> Vec<Rgb> {
+    pub fn render(&self, time: f64, layout: &[LedSpec], stage: &[StageSample]) -> Vec<Rgb> {
+        debug_assert_eq!(layout.len(), stage.len());
         let ctx = EffectContext::new(time, self.speed, self.base, self.wave_cycles);
         layout
             .iter()
-            .map(|led| {
-                self.effect
-                    .color_at(&ctx, led.position)
-                    .scale(self.brightness)
+            .zip(stage)
+            .map(|(led, stage)| {
+                let sample = LedSample::new(led.position, stage.loop_s);
+                self.effect.color_at(&ctx, &sample).scale(self.brightness)
             })
             .collect()
     }
@@ -68,11 +70,21 @@ mod tests {
         }
     }
 
+    fn stage(values: &[f32]) -> Vec<StageSample> {
+        values
+            .iter()
+            .map(|loop_s| StageSample { loop_s: *loop_s })
+            .collect()
+    }
+
     #[test]
     fn applies_brightness_after_the_effect() {
         let engine = Engine::new(&settings("static")).unwrap();
         let layout = vec![LedSpec::new("only", 0.5, 0.5)];
-        assert_eq!(engine.render(0.0, &layout), vec![Rgb::new(100, 50, 25)]);
+        assert_eq!(
+            engine.render(0.0, &layout, &stage(&[0.5])),
+            vec![Rgb::new(100, 50, 25)]
+        );
     }
 
     #[test]
@@ -83,8 +95,17 @@ mod tests {
             LedSpec::new("b", 0.25, 0.0),
             LedSpec::new("c", 0.75, 0.0),
         ];
-        let frame = engine.render(0.25, &layout);
+        let frame = engine.render(0.25, &layout, &stage(&[0.0, 0.25, 0.75]));
         assert_eq!(frame.len(), 3);
         assert_ne!(frame[0], frame[1]);
+    }
+
+    #[test]
+    fn loop_effects_use_the_stage_position() {
+        let engine = Engine::new(&settings("orbit")).unwrap();
+        let layout = vec![LedSpec::new("a", 0.0, 0.0), LedSpec::new("b", 0.5, 0.0)];
+        let frame = engine.render(0.0, &layout, &stage(&[0.0, 0.5]));
+        assert_eq!(frame[0], Rgb::new(100, 50, 25));
+        assert_eq!(frame[1], Rgb::BLACK);
     }
 }

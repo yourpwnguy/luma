@@ -34,3 +34,21 @@ impl LedSpec {
         }
     }
 }
+
+/// One LED with both its local device position and its place on the shared
+/// 0..1 device loop.
+///
+/// Per-device effects use `local`. Cross-device flow effects use `loop_s` so
+/// the keyboard, mouse, and laptop are treated as one strip of light rather
+/// than three unrelated devices.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LedSample {
+    pub local: Point,
+    pub loop_s: f32,
+}
+
+impl LedSample {
+    pub const fn new(local: Point, loop_s: f32) -> Self {
+        Self { local, loop_s }
+    }
+}

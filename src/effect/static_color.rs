@@ -2,7 +2,7 @@
 
 use crate::color::Rgb;
 use crate::effect::{Effect, EffectContext};
-use crate::geometry::Point;
+use crate::geometry::LedSample;
 
 /// Paints the configured base color everywhere.
 #[derive(Clone, Copy, Debug)]
@@ -38,7 +38,7 @@ impl Effect for StaticColor {
         }
     }
 
-    fn color_at(&self, ctx: &EffectContext, _position: Point) -> Rgb {
+    fn color_at(&self, ctx: &EffectContext, _led: &LedSample) -> Rgb {
         self.color.unwrap_or(ctx.base)
     }
 }

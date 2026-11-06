@@ -15,6 +15,7 @@ use crate::device::registry;
 use crate::device::sysfs;
 use crate::effect::NAMES;
 use crate::engine::Engine;
+use crate::stage::Stage;
 use crate::sync::Session;
 
 pub fn run(config_path: Option<&Path>, args: RunArgs, stop: Arc<AtomicBool>) -> Result<()> {
@@ -22,6 +23,12 @@ pub fn run(config_path: Option<&Path>, args: RunArgs, stop: Arc<AtomicBool>) -> 
     apply_run_overrides(&mut config, &args)?;
     let engine = Engine::new(&config.effect)?;
     let selected = select_devices(&config, args.devices.as_deref())?;
+    let stage = Stage::new(&config.stage);
+    stage.validate_for(
+        selected
+            .iter()
+            .map(|device| (device.id.as_str(), device.kind.as_str())),
+    )?;
     let devices = open_devices(&selected, args.dry_run, args.no_restore, config.general.fps)?;
 
     info!(
@@ -44,7 +51,7 @@ pub fn run(config_path: Option<&Path>, args: RunArgs, stop: Arc<AtomicBool>) -> 
         );
     }
 
-    let session = Session::start(devices, Arc::clone(&stop), args.no_restore)?;
+    let session = Session::start(devices, &stage, Arc::clone(&stop), args.no_restore)?;
     let drive_result = crate::drive::drive(
         &session,
         &engine,
@@ -120,6 +127,14 @@ pub fn validate_config(config_path: Option<&Path>) -> Result<()> {
             device.max_fps,
             device.restore.policy
         );
+    }
+    println!("stage loop:");
+    if config.stage.devices.is_empty() {
+        println!("  kind defaults: k617 0.00..0.45, g102 0.45..0.70, asus_tuf 0.70..0.85");
+    } else {
+        for stage in &config.stage.devices {
+            println!("  {} {:.2}..{:.2}", stage.id, stage.start, stage.end);
+        }
     }
     println!("config is valid");
     Ok(())

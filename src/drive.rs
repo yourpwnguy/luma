@@ -67,7 +67,7 @@ pub(crate) fn drive(
 
         let time = seq as f64 / f64::from(fps);
         for worker in session.workers() {
-            let colors = engine.render(time, &worker.layout);
+            let colors = engine.render(time, &worker.layout, &worker.stage);
             worker.publish(seq, target, colors);
         }
 

@@ -6,7 +6,7 @@
 
 use crate::color::{Hsv, Rgb};
 use crate::effect::{Effect, EffectContext};
-use crate::geometry::Point;
+use crate::geometry::LedSample;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Cycle;
@@ -16,7 +16,7 @@ impl Effect for Cycle {
         "cycle"
     }
 
-    fn color_at(&self, ctx: &EffectContext, _position: Point) -> Rgb {
+    fn color_at(&self, ctx: &EffectContext, _led: &LedSample) -> Rgb {
         let hue = ((ctx.time as f32) * ctx.speed * 0.1).rem_euclid(1.0);
         Rgb::from_hsv(Hsv {
             h: hue,

@@ -7,7 +7,7 @@
 
 use crate::color::{Hsv, Rgb};
 use crate::effect::{Effect, EffectContext};
-use crate::geometry::Point;
+use crate::geometry::LedSample;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Rainbow;
@@ -17,8 +17,8 @@ impl Effect for Rainbow {
         "rainbow"
     }
 
-    fn color_at(&self, ctx: &EffectContext, position: Point) -> Rgb {
-        let hue = (position.x * 0.8 + (ctx.time as f32) * ctx.speed * 0.08).rem_euclid(1.0);
+    fn color_at(&self, ctx: &EffectContext, led: &LedSample) -> Rgb {
+        let hue = (led.local.x * 0.8 + (ctx.time as f32) * ctx.speed * 0.08).rem_euclid(1.0);
         Rgb::from_hsv(Hsv {
             h: hue,
             s: 1.0,
@@ -30,13 +30,14 @@ impl Effect for Rainbow {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::geometry::Point;
 
     #[test]
     fn hue_changes_with_position() {
         let effect = Rainbow;
         let ctx = EffectContext::new(0.0, 1.0, Rgb::BLACK, 1.0);
-        let left = effect.color_at(&ctx, Point::new(0.0, 0.5));
-        let right = effect.color_at(&ctx, Point::new(0.5, 0.5));
+        let left = effect.color_at(&ctx, &LedSample::new(Point::new(0.0, 0.5), 0.0));
+        let right = effect.color_at(&ctx, &LedSample::new(Point::new(0.5, 0.5), 0.0));
         assert_ne!(left, right);
     }
 }

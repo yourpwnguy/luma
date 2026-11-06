@@ -13,6 +13,8 @@ on_error = "continue"
 stats_interval_secs = 5.0
 
 [effect]
+# Try "flow", "orbit", "chase", "pulse", or "pingpong" for effects that travel
+# across all three devices. The older per-device effects still work.
 name = "wave"
 color = "#00aaff"
 speed = 1.0
@@ -54,3 +56,23 @@ hardware_brightness = 3
 policy = "default"
 color = "#ffffff"
 hardware_brightness = 2
+
+# The flow effects move around a shared 0..1 loop. Each device owns a slice of
+# that loop. The slices are visited in start order, so this default runs:
+# keyboard -> mouse -> laptop. The space from 0.85 to 1.00 is intentionally
+# dark so the restart is visible. Change the start/end values to reverse the
+# order or make one device linger longer.
+[[stage.devices]]
+id = "keyboard"
+start = 0.00
+end = 0.45
+
+[[stage.devices]]
+id = "mouse"
+start = 0.45
+end = 0.70
+
+[[stage.devices]]
+id = "laptop"
+start = 0.70
+end = 0.85

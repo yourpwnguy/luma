@@ -11,6 +11,7 @@ use anyhow::{Context, Result, bail};
 use crate::app::{load_config, open_devices, select_devices};
 use crate::cli::SelfTestArgs;
 use crate::color::Rgb;
+use crate::stage::Stage;
 use crate::sync::Session;
 
 pub fn self_test(
@@ -40,8 +41,14 @@ pub fn self_test(
     }
 
     let fps = config.general.fps;
+    let stage = Stage::new(&config.stage);
+    stage.validate_for(
+        selected
+            .iter()
+            .map(|device| (device.id.as_str(), device.kind.as_str())),
+    )?;
     let devices = open_devices(&selected, args.dry_run, args.no_restore, fps)?;
-    let session = Session::start(devices, Arc::clone(&stop), args.no_restore)?;
+    let session = Session::start(devices, &stage, Arc::clone(&stop), args.no_restore)?;
 
     let test_result = if args.keymap {
         run_keymap_test(&session, &stop)

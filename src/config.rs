@@ -14,6 +14,7 @@ use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 
 use crate::color::Rgb;
+use crate::stage::StageConfig;
 
 pub const DEFAULT_CONFIG: &str = "config/luma.toml";
 
@@ -26,6 +27,10 @@ pub struct Config {
     pub effect: EffectSettings,
     #[serde(default)]
     pub devices: Vec<DeviceConfig>,
+    /// Optional loop spans for the cross-device flow effects. Missing entries
+    /// fall back to the built-in span for the device kind.
+    #[serde(default)]
+    pub stage: StageConfig,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -243,6 +248,31 @@ impl Config {
                 }
             }
         }
+
+        let mut stage_ids = HashSet::new();
+        for stage in &self.stage.devices {
+            if stage.id.trim().is_empty() {
+                bail!("every stage device needs a non-empty id");
+            }
+            if !stage_ids.insert(stage.id.clone()) {
+                bail!("duplicate stage device id {:?}", stage.id);
+            }
+            if !stage.start.is_finite()
+                || !stage.end.is_finite()
+                || stage.start < 0.0
+                || stage.end > 1.0
+                || stage.start >= stage.end
+            {
+                bail!(
+                    "stage device {}: start and end must be finite with \
+                     0 <= start < end <= 1",
+                    stage.id
+                );
+            }
+            if !self.devices.iter().any(|device| device.id == stage.id) {
+                bail!("stage entry for unknown device id {:?}", stage.id);
+            }
+        }
         Ok(())
     }
 
@@ -357,6 +387,69 @@ mod tests {
             config.devices[1].restore.policy,
             RestorePolicy::DefaultColor
         );
+    }
+
+    #[test]
+    fn parses_stage_spans() {
+        let config: Config = toml::from_str(
+            r#"
+            [[devices]]
+            id = "keyboard"
+            type = "k617"
+            [[devices]]
+            id = "mouse"
+            type = "g102"
+            [[stage.devices]]
+            id = "keyboard"
+            start = 0.0
+            end = 0.6
+            [[stage.devices]]
+            id = "mouse"
+            start = 0.6
+            end = 1.0
+            "#,
+        )
+        .unwrap();
+        config.validate().unwrap();
+        assert_eq!(config.stage.devices.len(), 2);
+        assert_eq!(config.stage.devices[0].start, 0.0);
+        assert_eq!(config.stage.devices[0].end, 0.6);
+    }
+
+    #[test]
+    fn rejects_bad_stage_span() {
+        let config: Config = toml::from_str(
+            r#"
+            [[devices]]
+            id = "keyboard"
+            type = "k617"
+            [[stage.devices]]
+            id = "keyboard"
+            start = 0.7
+            end = 0.7
+            "#,
+        )
+        .unwrap();
+        let err = config.validate().unwrap_err().to_string();
+        assert!(err.contains("stage device"));
+    }
+
+    #[test]
+    fn rejects_stage_for_unknown_device() {
+        let config: Config = toml::from_str(
+            r#"
+            [[devices]]
+            id = "keyboard"
+            type = "k617"
+            [[stage.devices]]
+            id = "typo"
+            start = 0.0
+            end = 0.5
+            "#,
+        )
+        .unwrap();
+        let err = config.validate().unwrap_err().to_string();
+        assert!(err.contains("unknown device id"));
     }
 
     #[test]

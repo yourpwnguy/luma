@@ -26,7 +26,7 @@ main
          target = start + n / fps
          sleep until target
          for each worker:
-           colors = engine.render(n / fps, worker.layout)
+           colors = engine.render(n / fps, worker.layout, worker.stage)
            worker.publish(n, target, colors)
          poll worker events
          print stats
@@ -52,9 +52,10 @@ different LED count or geometry does not change the effect code.
 | `drive.rs` | The shared frame loop, late-frame handling, and statistics. |
 | `self_test.rs` | Visible color, key, and keymap test patterns. |
 | `config.rs` | TOML schema, defaults, strict validation. |
-| `engine.rs` | Applies an effect and brightness to one layout. |
+| `engine.rs` | Applies an effect and brightness to one layout and its loop samples. |
 | `effect/*` | Stateless color functions and the registry. |
-| `geometry.rs` | Normalized `Point` and `LedSpec`. |
+| `geometry.rs` | Normalized `Point`, `LedSpec`, and `LedSample` (local position plus shared loop position). |
+| `stage.rs` | Maps each device layout into its slice of the shared 0..1 loop. |
 | `color.rs` | RGB, HSV, hex, scaling. |
 | `sync.rs` | Mailboxes, worker threads, deadlines, latency EWMA, reconnect, shutdown. |
 | `device/mod.rs` | `Device` trait, frame length check, hidraw open helper. |
@@ -64,6 +65,33 @@ different LED count or geometry does not change the effect code.
 | `device/k617.rs` | Sinodragon report 8 frames and the 136-byte config snapshot. |
 | `device/k617_layout.rs` | The 61-key physical layout and LED slot table. |
 | `device/asus_tuf.rs` | `asus-wmi` sysfs ABI. |
+
+## Shared device loop
+
+Per-device effects only need the local LED position. Cross-device flow effects
+need a common order, so `stage.rs` maps each device onto a 0..1 loop. The
+default spans are:
+
+```text
+keyboard 0.00..0.45  ->  mouse 0.45..0.70  ->  laptop 0.70..0.85  ->  gap 0.85..1.00
+```
+
+A multi-LED device maps its local `x` into its span. A one-LED device uses the
+middle of its span. The mapping is computed once in `Session::start` and stored
+next to the worker's layout, so the frame loop does no lookup or geometry work.
+The engine passes both values to the effect as `LedSample { local, loop_s }`.
+The per-device effects read `local`; `flow`, `orbit`, `chase`, `pulse`, and
+`pingpong` read `loop_s`.
+
+`StageConfig` is optional. An explicit `[[stage.devices]]` entry overrides the
+kind default, which lets the user reverse the order or change how long a device
+stays active without touching code. The 0.85..1.00 gap is intentionally dark:
+it gives the loop a visible restart instead of an invisible wrap.
+
+The loop is a timing and ordering model, not a 2D simulation of the desk. That
+is deliberate. It gives a predictable, readable flow on a 61-key keyboard, a
+three-zone mouse, and a one-zone laptop without pretending the laptop can show
+a spatial gradient.
 
 ## Timing model
 

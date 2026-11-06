@@ -72,7 +72,7 @@ Hardware-verified anchors from the fizz-rgb project:
 | J | 45 | 7, 3 |
 | Enter | 81 | 13, 3 |
 
-The full table in `src/device/k617.rs` is derived from the same layout. The
+The full table in `src/device/k617_layout.rs` is derived from the same layout. The
 `Menu` (65) and `RCtrl` (71) entries are the two upstream best guesses. They
 are marked in the code and can be checked with:
 
@@ -285,6 +285,15 @@ brightness went back to the original level after the run.
   <https://github.com/CalcProgrammer1/OpenRGB/blob/master/Controllers/AsusTUFLaptopController/RGBController_AsusTUFLaptop_Linux.cpp>
 * OpenRGB ASUS TUF detection:
   <https://github.com/CalcProgrammer1/OpenRGB/blob/master/Controllers/AsusTUFLaptopController/AsusTUFLaptopDetect_Linux.cpp>
+
+## Host-side flow effects
+
+The `flow`, `orbit`, `chase`, `pulse`, and `pingpong` effects do not add any
+device protocol. They only change the colors computed for each frame. No new
+USB control transfers or sysfs writes are sent. The keyboard still receives
+report `0x08` frames, the mouse still receives report `0x11` packets, and the
+ASUS still receives the same `kbd_rgb_mode` line. The loop mapping is described
+in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ## Live verification log
 

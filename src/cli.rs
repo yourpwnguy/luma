@@ -44,7 +44,8 @@ pub enum Command {
 
 #[derive(Debug, Args)]
 pub struct RunArgs {
-    /// Effect name: static, off, breathing, rainbow, wave, cycle.
+    /// Effect name, for example wave, flow, or orbit. Run `luma effects` for
+    /// the full list.
     #[arg(long, value_name = "NAME")]
     pub effect: Option<String>,
 

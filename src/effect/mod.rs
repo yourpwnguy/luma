@@ -5,9 +5,19 @@
 //! same phase. If you later add a stateful effect (fire, sparkle, audio
 //! reactive), extend the trait with a `reset`/`tick` pair instead of keeping
 //! hidden state per device; one shared instance must stay the source of truth.
+//!
+//! Per-device effects read `led.local`. Cross-device flow effects read
+//! `led.loop_s`, the LED's position on the shared 0..1 device loop described
+//! in `stage.rs`.
 
 mod breathing;
+mod chase;
 mod cycle;
+mod flow;
+mod loop_util;
+mod orbit;
+mod pingpong;
+mod pulse;
 mod rainbow;
 mod static_color;
 mod wave;
@@ -15,10 +25,15 @@ mod wave;
 use anyhow::{Result, bail};
 
 use crate::color::Rgb;
-use crate::geometry::Point;
+use crate::geometry::LedSample;
 
 pub use breathing::Breathing;
+pub use chase::Chase;
 pub use cycle::Cycle;
+pub use flow::Flow;
+pub use orbit::Orbit;
+pub use pingpong::PingPong;
+pub use pulse::Pulse;
 pub use rainbow::Rainbow;
 pub use static_color::StaticColor;
 pub use wave::Wave;
@@ -47,10 +62,10 @@ impl EffectContext {
     }
 }
 
-/// A pure function from (time, position) to color.
+/// A pure function from one LED sample to a color.
 pub trait Effect: Send + Sync {
     fn name(&self) -> &'static str;
-    fn color_at(&self, ctx: &EffectContext, position: Point) -> Rgb;
+    fn color_at(&self, ctx: &EffectContext, led: &LedSample) -> Rgb;
 }
 
 /// Build an effect by CLI/config name. Aliases are deliberately small and
@@ -63,6 +78,11 @@ pub fn build(name: &str) -> Result<Box<dyn Effect>> {
         "rainbow" => Box::new(Rainbow),
         "wave" => Box::new(Wave),
         "cycle" | "spectrum" => Box::new(Cycle),
+        "flow" => Box::new(Flow),
+        "orbit" => Box::new(Orbit),
+        "chase" => Box::new(Chase),
+        "pulse" => Box::new(Pulse),
+        "pingpong" => Box::new(PingPong),
         other => bail!(
             "unknown effect {other:?}; available: {}",
             NAMES
@@ -89,14 +109,37 @@ pub const NAMES: &[(&str, &str)] = &[
         "cycle",
         "one global hue cycling over time (best on single-zone devices)",
     ),
+    (
+        "flow",
+        "rainbow gradient that travels around the keyboard -> mouse -> laptop loop",
+    ),
+    ("orbit", "one comet sweeping keyboard -> mouse -> laptop"),
+    ("chase", "three comets chasing around the device loop"),
+    (
+        "pulse",
+        "wide brightness wave traveling around the device loop",
+    ),
+    (
+        "pingpong",
+        "comet bouncing forward and backward around the device loop",
+    ),
 ];
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::geometry::Point;
 
     fn ctx(time: f64) -> EffectContext {
         EffectContext::new(time, 1.0, Rgb::new(255, 0, 0), 2.0)
+    }
+
+    fn led(x: f32, y: f32) -> LedSample {
+        LedSample::new(Point::new(x, y), 0.0)
+    }
+
+    fn loop_led(loop_s: f32) -> LedSample {
+        LedSample::new(Point::new(0.5, 0.5), loop_s)
     }
 
     #[test]
@@ -116,10 +159,17 @@ mod tests {
     }
 
     #[test]
+    fn loop_effects_are_registered() {
+        for name in ["flow", "orbit", "chase", "pulse", "pingpong"] {
+            assert_eq!(build(name).unwrap().name(), name);
+        }
+    }
+
+    #[test]
     fn static_is_independent_of_position_and_time() {
         let effect = build("static").unwrap();
-        let a = effect.color_at(&ctx(0.0), Point::new(0.0, 0.0));
-        let b = effect.color_at(&ctx(99.0), Point::new(1.0, 1.0));
+        let a = effect.color_at(&ctx(0.0), &led(0.0, 0.0));
+        let b = effect.color_at(&ctx(99.0), &led(1.0, 1.0));
         assert_eq!(a, b);
         assert_eq!(a, Rgb::new(255, 0, 0));
     }
@@ -127,16 +177,26 @@ mod tests {
     #[test]
     fn wave_differs_across_space() {
         let effect = build("wave").unwrap();
-        let left = effect.color_at(&ctx(0.0), Point::new(0.0, 0.0));
-        let quarter = effect.color_at(&ctx(0.0), Point::new(0.25, 0.0));
+        let left = effect.color_at(&ctx(0.0), &led(0.0, 0.0));
+        let quarter = effect.color_at(&ctx(0.0), &led(0.25, 0.0));
         assert_ne!(left, quarter);
     }
 
     #[test]
     fn cycle_is_global() {
         let effect = build("cycle").unwrap();
-        let a = effect.color_at(&ctx(1.0), Point::new(0.0, 0.0));
-        let b = effect.color_at(&ctx(1.0), Point::new(1.0, 1.0));
+        let a = effect.color_at(&ctx(1.0), &led(0.0, 0.0));
+        let b = effect.color_at(&ctx(1.0), &led(1.0, 1.0));
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn orbit_head_is_bright_and_the_far_side_is_dark() {
+        let effect = build("orbit").unwrap();
+        assert_eq!(
+            effect.color_at(&ctx(0.0), &loop_led(0.0)),
+            Rgb::new(255, 0, 0)
+        );
+        assert_eq!(effect.color_at(&ctx(0.0), &loop_led(0.5)), Rgb::BLACK);
     }
 }

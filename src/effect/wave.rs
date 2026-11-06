@@ -14,7 +14,7 @@ use std::f32::consts::TAU;
 
 use crate::color::Rgb;
 use crate::effect::{Effect, EffectContext};
-use crate::geometry::Point;
+use crate::geometry::LedSample;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Wave;
@@ -24,8 +24,8 @@ impl Effect for Wave {
         "wave"
     }
 
-    fn color_at(&self, ctx: &EffectContext, position: Point) -> Rgb {
-        let phase = position.x * ctx.wave_cycles - (ctx.time as f32) * ctx.speed * 0.5;
+    fn color_at(&self, ctx: &EffectContext, led: &LedSample) -> Rgb {
+        let phase = led.local.x * ctx.wave_cycles - (ctx.time as f32) * ctx.speed * 0.5;
         let envelope = 0.5 + 0.5 * (TAU * phase).cos();
         ctx.base.scale(0.12 + 0.88 * envelope)
     }
@@ -34,13 +34,14 @@ impl Effect for Wave {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::geometry::Point;
 
     #[test]
     fn wave_moves_with_time() {
         let effect = Wave;
-        let point = Point::new(0.25, 0.5);
-        let a = effect.color_at(&EffectContext::new(0.0, 1.0, Rgb::WHITE, 2.0), point);
-        let b = effect.color_at(&EffectContext::new(0.5, 1.0, Rgb::WHITE, 2.0), point);
+        let led = LedSample::new(Point::new(0.25, 0.5), 0.0);
+        let a = effect.color_at(&EffectContext::new(0.0, 1.0, Rgb::WHITE, 2.0), &led);
+        let b = effect.color_at(&EffectContext::new(0.5, 1.0, Rgb::WHITE, 2.0), &led);
         assert_ne!(a, b);
     }
 }

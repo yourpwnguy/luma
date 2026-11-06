@@ -58,6 +58,14 @@ echo "=== global cycle (watch synchronization) ==="
 "${binary}" run --effect cycle --speed 2 --duration 3
 
 echo
+echo "=== orbit: one comet around the triangle ==="
+"${binary}" run --effect orbit --speed 1 --duration 8
+
+echo
+echo "=== flow: rainbow around the device loop ==="
+"${binary}" run --effect flow --duration 6
+
+echo
 echo "=== self-test colors ==="
 "${binary}" self-test
 

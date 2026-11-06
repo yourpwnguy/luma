@@ -15,6 +15,7 @@ mod effect;
 mod engine;
 mod geometry;
 mod self_test;
+mod stage;
 mod sync;
 
 use std::process::ExitCode;
