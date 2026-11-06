@@ -13,9 +13,15 @@ on_error = "continue"
 stats_interval_secs = 5.0
 
 [effect]
-# Try "flow", "orbit", "chase", "pulse", or "pingpong" for effects that travel
-# across all three devices. The older per-device effects still work.
-name = "wave"
+# "aurora" is the full-field default: every key stays lit.
+# Try "constellation", "circuit", "ribbon", or "bloom" for the other
+# full-field looks, or "flow", "orbit", "chase", "pulse", or "pingpong" for
+# effects that travel across all three devices. The older per-device effects
+# still work.
+#
+# The five full-field effects use their own signature palettes. --color does
+# not recolor them; it still works for the older effects.
+name = "aurora"
 color = "#00aaff"
 speed = 1.0
 brightness = 0.8

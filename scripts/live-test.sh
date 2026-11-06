@@ -66,6 +66,13 @@ echo "=== flow: rainbow around the device loop ==="
 "${binary}" run --effect flow --duration 6
 
 echo
+echo "=== full-field atmospheric effects (all keys stay lit) ==="
+for effect in aurora constellation circuit ribbon bloom; do
+    echo "--- ${effect} ---"
+    "${binary}" run --effect "${effect}" --duration 4
+done
+
+echo
 echo "=== self-test colors ==="
 "${binary}" self-test
 

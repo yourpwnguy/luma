@@ -7,6 +7,10 @@
 /luma-live-test.log
 *.log
 
+# Python cache for scripts/preview-effects.py
+__pycache__/
+*.pyc
+
 # Coverage and profiling
 /coverage/
 *.profraw

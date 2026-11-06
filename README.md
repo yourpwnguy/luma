@@ -36,6 +36,7 @@ the wire" and "upstream says this should work".
 | ASUS exit restore | Restores a configured default color and the captured brightness. The mode is write-only, so the previous mode cannot be read. |
 | Synchronization | 30 fps engine, absolute deadlines, per-device latency compensation. K617 and G102 measured near 30 fps; ASUS runs at 15 fps. |
 | Cross-device flow effects | Host-side only, no new protocol. Live-tested with orbit and flow at 30 fps and no late or dropped K617/G102 frames. |
+| Full-field atmospheric effects | Host-side only. Live-tested aurora, constellation, circuit, ribbon, and bloom at 30 fps with no late or dropped K617/G102 frames. Each run restored all three devices. |
 
 The one thing still pending on this exact unit is the physical confirmation of
 the Menu and RCtrl slot positions. Everything else in the table was exercised
@@ -143,6 +144,7 @@ src/
   config.rs                  TOML schema and validation
   engine.rs                  one effect clock, per-device rendering
   effect/                    one file per effect and the registry
+  effect/palette.rs          color mixing and stable per-LED hashing
   geometry.rs                normalized LED positions and samples
   stage.rs                   shared 0..1 device loop mapping
   color.rs                   RGB, HSV, hex parsing
@@ -159,6 +161,7 @@ src/
 scripts/
   install-permissions.sh     one-time udev rule install
   live-test.sh               visible hardware validation
+  preview-effects.py         no-hardware terminal preview of the full-field effects
 udev/70-luma.rules        least-privilege device permissions
 docs/
   ARCHITECTURE.md
@@ -365,12 +368,64 @@ clean divisor of a 30 fps engine.
 | `chase` | Three comets evenly spaced around the device loop. |
 | `pulse` | Wide, smooth brightness wave traveling around the loop. |
 | `pingpong` | A comet travels forward, reverses, and comes back. |
+| `aurora` | Full-field teal and violet nebula. Every key stays lit. |
+| `constellation` | Lit navy starfield with twinkling stars and a shooting star. |
+| `circuit` | Teal circuit board with traces, solder points, and data packets. |
+| `ribbon` | Wide prism rainbow ribbon with a moving specular sheen. |
+| `bloom` | Three overlapping glows with a lub-dub heartbeat. |
 
-The per-device effects sample every LED's normalized position from 0 to 1. The
-K617 has 61 positions in a 6-row layout, the G102 has left/center/right at
-0/0.5/1, and the ASUS has one LED at the center. A single-zone device therefore
-follows the center of the same wave instead of pretending to have per-key
-resolution.
+The last five are the full-field effects. They deliberately keep a visible
+base on every LED, so the keyboard never looks switched off between highlights.
+They use their own signature palettes, which means `--color` does not recolor
+them. The older effects still use `--color`.
+
+### Full-field effects
+
+```bash
+./target/release/luma run --effect aurora --duration 8
+./target/release/luma run --effect constellation --duration 8
+./target/release/luma run --effect circuit --duration 8
+./target/release/luma run --effect ribbon --duration 8
+./target/release/luma run --effect bloom --duration 8
+```
+
+What to watch for:
+
+* **Aurora** has two soft nebula waves. One is tied to the local key position,
+  one to the shared loop, so the color keeps moving from the keyboard to the
+  mouse and laptop.
+* **Constellation** keeps a navy wash under everything. Stars are stable per
+  key, the shooting star crosses all three devices, and two faint constellation
+  lines give the keyboard a readable shape.
+* **Circuit** draws a teal board with fixed traces and a few solder points.
+  One cyan packet follows the device loop; a second, faster scan runs across
+  each device locally.
+* **Ribbon** carries one rainbow hue field around the loop and adds a moving
+  white sheen on top. The whole keyboard stays brightly colored.
+* **Bloom** puts cyan, magenta, and amber glows on the keyboard, mouse, and
+  laptop slices. The glows overlap and pulse with a double heartbeat, then
+  rest without going black.
+
+The full-field effects are stateless, like the rest of the engine. They only
+read time, the local LED position, and the loop position. No new USB or sysfs
+commands are involved.
+
+There is also a no-hardware terminal preview:
+
+```bash
+./scripts/preview-effects.py
+```
+
+It draws a simplified keyboard, mouse, and laptop bar. Use `1-5` to switch,
+`space` to pause, `[` and `]` to change speed, and `q` to quit. It uses
+simplified math, so the Rust modules are the source of truth. The `--snapshot`
+and `--no-color` flags are useful when stdout is not a terminal.
+
+For the per-device effects, the engine samples every LED's normalized position
+from 0 to 1. The K617 has 61 positions in a 6-row layout, the G102 has
+left/center/right at 0/0.5/1, and the ASUS has one LED at the center. A
+single-zone device therefore follows the center of the same wave instead of
+pretending to have per-key resolution.
 
 ### The shared device loop
 
@@ -439,9 +494,13 @@ entry.
    only inputs.
 5. Use `led.local` for an effect that should look the same on every device.
    Use `led.loop_s` for an effect that should travel across the devices.
-6. Run `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, and
+6. If the effect should keep the whole setup lit, start from a visible base
+   color instead of black. `src/effect/palette.rs` has `mix`, `add`, `amplify`,
+   and a stable `hash01` for stars and traces. The registry test
+   `atmospheric_effects_keep_every_led_lit` is the guardrail for this.
+7. Run `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, and
    `cargo test`.
-7. Try it with `luma run --dry-run --effect my_effect --duration 2`, then on
+8. Try it with `luma run --dry-run --effect my_effect --duration 2`, then on
    hardware.
 
 Effects are stateless by design so all devices share one phase. If you need
@@ -554,6 +613,22 @@ then through the three mouse zones, then pulses the laptop, then restarts after
 a short dark gap. Flow shows a rainbow gradient where the keyboard, mouse, and
 laptop each hold the part of the gradient that matches their loop slice.
 
+**Full-field atmospheric pass**
+
+```bash
+./target/release/luma run --effect aurora --duration 8
+./target/release/luma run --effect constellation --duration 8
+./target/release/luma run --effect circuit --duration 8
+./target/release/luma run --effect ribbon --duration 8
+./target/release/luma run --effect bloom --duration 8
+```
+
+Expected: every key stays visibly lit for the whole run. Aurora and ribbon
+cover the keyboard in color, constellation keeps a navy starfield, circuit
+keeps a teal board with moving packets, and bloom pulses three overlapping
+glows. The laptop backlight follows the color of its loop slice and pulses as
+the animation reaches it.
+
 **Everything at once**
 
 ```bash
@@ -584,9 +659,20 @@ The script mirrors its output to `luma-live-test.log`.
 * **G102 has three zones, not per-key.** The driver maps left, center, and
   right. It cannot read the current color, so exit restore is a configured
   default.
-* **ASUS TUF A15 has one keyboard zone.** The `asus-wmi` ABI exposes one color
-  for the whole keyboard. Effects are rendered at 15 fps to keep ACPI traffic
-  reasonable.
+* **ASUS TUF A15 per-key control is not possible on this model.** The internal
+  keyboard is an `AT Translated Set 2 keyboard` on the i8042 PS/2 controller.
+  It does not appear as a per-key RGB USB HID device, and the only Linux RGB
+  interface is the `asus-wmi` single-zone ABI: one RGB triplet for the whole
+  keyboard. The FA506IHRB is a single-zone RGB model, not a firmware limitation
+  that a driver can work around. luma therefore treats the laptop as one large
+  ambient pixel. True per-key output would need different keyboard hardware or
+  an external addressable LED matrix/strip with its own controller. Do not
+  flash the embedded controller to chase this; the risk is a brick and there is
+  no verified per-key protocol on this machine.
+* **ASUS effects run at 15 fps.** The `asus-wmi` ABI is a single ACPI write per
+  frame. Running it at the keyboard's 30 fps doubles the ACPI traffic for no
+  visible gain on a one-zone device, so the worker drops to 15 fps and the
+  engine drops alternate frames for that device.
 * **The device loop is one-dimensional.** The spans describe the order and
   timing of the flow, not the physical distance between the devices. Tune the
   `[[stage.devices]]` entries if the physical layout changes. The laptop can

@@ -93,7 +93,7 @@ pub fn list_devices() -> Result<()> {
 pub fn list_effects() -> Result<()> {
     println!("effects:");
     for (name, description) in NAMES {
-        println!("  {name:<11} {description}");
+        println!("  {name:<14} {description}");
     }
     Ok(())
 }

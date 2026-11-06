@@ -314,7 +314,10 @@ fn default_stats_interval() -> f64 {
 }
 
 fn default_effect() -> String {
-    "static".to_string()
+    // A config file without an [effect] section gets the full-field flagship
+    // rather than a flat color. The explicit "static" and "off" effects are
+    // still available when you want something quiet.
+    "aurora".to_string()
 }
 
 fn default_color() -> Rgb {

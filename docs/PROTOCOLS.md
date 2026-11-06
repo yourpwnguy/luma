@@ -274,6 +274,15 @@ the engine samples a single normalized position at the center of the keyboard.
 Brightness is written through the standard LED class attribute, and the
 original value is captured before the first change and restored at exit.
 
+This is a hardware limit, not a missing driver. The internal keyboard is an
+`AT Translated Set 2 keyboard` on `isa0060/serio0`, so it is a PS/2 device, not
+a per-key RGB USB HID endpoint. `lsusb` on this machine shows no ASUS keyboard
+RGB interface. The only exposed RGB control is the single-zone WMI command
+above. There is no verified software-only path to address individual laptop
+keys on this model. Per-key output would require a different keyboard module or
+an external addressable LED matrix/strip with its own controller. Do not write
+undocumented EC commands or flash the EC to attempt it.
+
 Live result: the ACPI write changed the keyboard to red and green, and the
 brightness went back to the original level after the run.
 
@@ -286,14 +295,15 @@ brightness went back to the original level after the run.
 * OpenRGB ASUS TUF detection:
   <https://github.com/CalcProgrammer1/OpenRGB/blob/master/Controllers/AsusTUFLaptopController/AsusTUFLaptopDetect_Linux.cpp>
 
-## Host-side flow effects
+## Host-side effects
 
-The `flow`, `orbit`, `chase`, `pulse`, and `pingpong` effects do not add any
-device protocol. They only change the colors computed for each frame. No new
-USB control transfers or sysfs writes are sent. The keyboard still receives
-report `0x08` frames, the mouse still receives report `0x11` packets, and the
-ASUS still receives the same `kbd_rgb_mode` line. The loop mapping is described
-in [`ARCHITECTURE.md`](ARCHITECTURE.md).
+The `flow`, `orbit`, `chase`, `pulse`, and `pingpong` effects, plus the
+full-field `aurora`, `constellation`, `circuit`, `ribbon`, and `bloom` effects,
+do not add any device protocol. They only change the colors computed for each
+frame. No new USB control transfers or sysfs writes are sent. The keyboard
+still receives report `0x08` frames, the mouse still receives report `0x11`
+packets, and the ASUS still receives the same `kbd_rgb_mode` line. The loop
+mapping is described in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ## Live verification log
 
@@ -322,6 +332,20 @@ Visual confirmation from the machine owner: all three devices showed red and
 green correctly. The K617 returned to its previous wave preset after each run,
 the G102 went to the configured dim white, and the ASUS returned to white at
 the captured brightness.
+
+The five full-field effects were then run for six seconds each. Aurora, the
+first of the five, reported:
+
+```text
+keyboard: 179f 6.6ms late=0 drop=0 err=0
+mouse:    179f 3.4ms late=0 drop=0 err=0
+laptop:    90f 0.6ms late=0 drop=89 err=0
+all devices restored
+```
+
+The remaining four effects produced the same frame health: zero late frames and
+zero write errors on the keyboard and mouse, with the laptop dropping alternate
+frames by design because it runs at 15 fps. All runs restored the devices.
 
 The focused key test (`self-test --keys Escape,Menu,RCtrl`) writes the frames
 successfully but the physical slot confirmation for Menu and RCtrl is still

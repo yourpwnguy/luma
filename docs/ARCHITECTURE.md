@@ -54,6 +54,7 @@ different LED count or geometry does not change the effect code.
 | `config.rs` | TOML schema, defaults, strict validation. |
 | `engine.rs` | Applies an effect and brightness to one layout and its loop samples. |
 | `effect/*` | Stateless color functions and the registry. |
+| `effect/palette.rs` | Color mixing, saturating adds, and stable per-LED hashing for the atmospheric effects. |
 | `geometry.rs` | Normalized `Point`, `LedSpec`, and `LedSample` (local position plus shared loop position). |
 | `stage.rs` | Maps each device layout into its slice of the shared 0..1 loop. |
 | `color.rs` | RGB, HSV, hex, scaling. |
@@ -81,7 +82,8 @@ middle of its span. The mapping is computed once in `Session::start` and stored
 next to the worker's layout, so the frame loop does no lookup or geometry work.
 The engine passes both values to the effect as `LedSample { local, loop_s }`.
 The per-device effects read `local`; `flow`, `orbit`, `chase`, `pulse`, and
-`pingpong` read `loop_s`.
+`pingpong` read `loop_s`. The atmospheric effects read both, because they want
+local detail plus cross-device motion.
 
 `StageConfig` is optional. An explicit `[[stage.devices]]` entry overrides the
 kind default, which lets the user reverse the order or change how long a device
@@ -92,6 +94,39 @@ The loop is a timing and ordering model, not a 2D simulation of the desk. That
 is deliberate. It gives a predictable, readable flow on a 61-key keyboard, a
 three-zone mouse, and a one-zone laptop without pretending the laptop can show
 a spatial gradient.
+
+## Atmospheric effects
+
+The five full-field effects (`aurora`, `constellation`, `circuit`, `ribbon`,
+and `bloom`) exist because the comet effects leave most keys dark most of the
+time. They keep a lit base under every LED and add motion on top of it. The
+unit tests enforce that every LED channel stays above zero across a grid of
+keyboard positions, the mouse zones, the laptop, and several points in time.
+
+They use both geometry inputs:
+
+| Effect | Local position | Loop position |
+| --- | --- | --- |
+| `aurora` | Nebula wave and fine detail | Second drift wave and hue offset |
+| `constellation` | Stable star identity and constellation lines | Shooting star path |
+| `circuit` | Board traces, solder points, local scan | Cross-device data packet |
+| `ribbon` | Fabric weave and specular highlight | Rainbow hue field |
+| `bloom` | Not used, the glows are loop-based | Distance to the three device glows |
+
+`effect/palette.rs` holds the small vocabulary they share: linear `mix`,
+saturating `add`, `amplify` for overlapping glows that need to exceed 1.0, and
+`hash01`. The hash is a quantized-position integer mix, not a time-seeded
+random number. That is what keeps a star on the same key and a solder point on
+the same trace across frames.
+
+The five effects use fixed signature palettes. `--color` is intentionally not
+applied to them; tinting a reviewed palette would make the previews and the
+hardware look different. The older effects continue to use `--color`.
+
+No device protocol changed. The new effects are entirely host-side color
+computation, so the keyboard still receives report `0x08` frames, the mouse
+still receives report `0x11` packets, and the ASUS still receives the same
+`kbd_rgb_mode` line.
 
 ## Timing model
 
