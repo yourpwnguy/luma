@@ -1,0 +1,56 @@
+# luma configuration
+#
+# Run from the repository root so this file is found automatically, or pass
+# --config /path/to/luma.toml. Device ids are arbitrary; use them with
+# `luma run --devices mouse,laptop`.
+
+[general]
+# 30 fps is the verified K617 per-key streaming rate. The ASUS EC is slower,
+# so its worker defaults to 15 fps even when the engine runs at 30.
+fps = 30
+# duration_secs = 30
+on_error = "continue"
+stats_interval_secs = 5.0
+
+[effect]
+name = "wave"
+color = "#00aaff"
+speed = 1.0
+brightness = 0.8
+wave_cycles = 2.0
+
+[[devices]]
+id = "keyboard"
+type = "k617"
+enabled = true
+required = true
+max_fps = 30
+
+[[devices]]
+id = "mouse"
+type = "g102"
+enabled = true
+required = true
+max_fps = 30
+[devices.restore]
+# The G102 protocol has no reliable "read current color" command, so restore
+# applies a known safe default instead of pretending to recover the old frame.
+policy = "default"
+color = "#ffffff"
+brightness = 0.30
+
+[[devices]]
+id = "laptop"
+type = "asus_tuf"
+enabled = true
+required = true
+max_fps = 15
+[devices.options]
+# Runtime hardware brightness level, 0..=3. The original level is restored.
+hardware_brightness = 3
+[devices.restore]
+# The ASUS ABI is write-only, so the previous mode cannot be read. Restore a
+# neutral static color and put the original hardware brightness back.
+policy = "default"
+color = "#ffffff"
+hardware_brightness = 2

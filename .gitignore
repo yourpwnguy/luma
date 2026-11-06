@@ -1,0 +1,51 @@
+# Rust build output
+/target/
+**/*.rs.bk
+*.pdb
+
+# Local test output and logs
+/luma-live-test.log
+*.log
+
+# Coverage and profiling
+/coverage/
+*.profraw
+*.profdata
+
+# Local environment files and secrets
+.env
+.env.*
+!.env.example
+
+# USB captures and firmware dumps (large, generated, or machine-specific)
+*.pcap
+*.pcapng
+*.cap
+/dumps/
+/captures/
+
+# Editor and IDE state
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+.#*
+
+# OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.bak
+*.orig
+*.rej
+
+# Intentionally tracked:
+#   Cargo.lock       binary crate, lock the dependency graph
+#   config/luma.toml sample config
+#   udev/70-luma.rules
+#   scripts/*.sh

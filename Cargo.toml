@@ -1,0 +1,21 @@
+[package]
+name = "luma"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Synchronize RGB lighting across a Redragon K617, Logitech G102, and ASUS TUF laptop keyboard"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4.6", features = ["derive"] }
+env_logger = "0.11"
+hidapi = "2.6"
+log = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+signal-hook = "0.4"
+toml = "1.2"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

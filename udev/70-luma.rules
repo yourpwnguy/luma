@@ -1,0 +1,21 @@
+# luma device permissions for Linux.
+#
+# The two USB devices expose their normal input interface as interface 0 and
+# their vendor control channel as interface 1. Only interface 1 is granted to
+# the active seat; the boot keyboard/mouse node stays root-only so this rule
+# does not turn into a keylogger grant.
+#
+# Do not write ATTRS{bInterfaceNumber}=="01" here. idVendor/idProduct live on
+# the USB device parent, bInterfaceNumber lives on the interface parent, and
+# udev requires all ATTRS matches in one rule to resolve on the same parent.
+# ID_USB_INTERFACE_NUM is set by the persistent-hidraw/usb_id rules before
+# this file runs, so it is both correct and readable.
+SUBSYSTEM=="hidraw", ENV{ID_USB_INTERFACE_NUM}=="01", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c092", TAG+="uaccess", GROUP="input", MODE="0660"
+SUBSYSTEM=="hidraw", ENV{ID_USB_INTERFACE_NUM}=="01", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="0049", TAG+="uaccess", GROUP="input", MODE="0660"
+
+# The ASUS TUF keyboard RGB interface is a pair of write-only sysfs attributes,
+# not a device node. udev TAG+="uaccess" does not apply to sysfs, so make just
+# these two attributes writable. They cannot read keystrokes, but any local
+# user can change the keyboard color. Remove this rule if that matters on a
+# multi-user machine and run luma with the required privileges instead.
+ACTION=="add|change", SUBSYSTEM=="leds", KERNEL=="asus::kbd_backlight", RUN+="/usr/bin/chmod a+w /sys%p/kbd_rgb_mode /sys%p/brightness"
